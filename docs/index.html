@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Recipe Finder</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>[v-cloak]{display:none}</style>
+</head>
+<body>
+  <div id="app" v-cloak>
+    <header class="site-header">
+      <h1>Recipe Finder</h1>
+      <p class="tagline">Filter by meal, diet type, and healthiness</p>
+    </header>
+
+    <section class="controls">
+      <div class="search-row">
+        <input
+          v-model.trim="state.query"
+          class="search"
+          type="search"
+          placeholder="Search recipes (e.g., chicken, pasta, curry)…"
+          @keyup.enter="runSearch(true)"
+          aria-label="Search recipes"
+        />
+        <button class="btn primary" @click="runSearch(true)" :disabled="state.loading">
+          {{ state.loading ? 'Searching…' : 'Search' }}
+        </button>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="Meal categories">
+        <button
+          v-for="c in categories"
+          :key="c.key"
+          class="tab"
+          :class="{ active: state.category.key === c.key }"
+          role="tab"
+          :aria-selected="state.category.key === c.key"
+          @click="selectCategory(c)"
+        >
+          {{ c.label }}
+        </button>
+      </div>
+
+      <div class="filter-grid">
+        <label class="filter">
+          <span>Diet type</span>
+          <select v-model="state.diet" class="select">
+            <option value="">Any</option>
+            <option v-for="d in dietOptions" :key="d" :value="d">{{ d }}</option>
+          </select>
+        </label>
+
+        <label class="filter">
+          <span>Health labels</span>
+          <select v-model="state.health" class="select" multiple size="6" aria-label="Health filters">
+            <option v-for="h in healthOptions" :key="h" :value="h">{{ h }}</option>
+          </select>
+          <small class="hint">Cmd/Ctrl-click to select multiple</small>
+        </label>
+
+        <label class="filter">
+          <span>Max calories (per recipe)</span>
+          <input
+            v-model.number="state.maxCalories"
+            type="number" min="0" step="50" placeholder="e.g., 700" class="input"
+          />
+          <small class="hint">Leave blank for no limit</small>
+        </label>
+
+        <div class="filter actions">
+          <button class="btn" @click="clearFilters" :disabled="state.loading">Clear filters</button>
+          <button class="btn primary" @click="runSearch(true)" :disabled="state.loading">Apply filters</button>
+        </div>
+      </div>
+    </section>
+
+    <main class="results" aria-live="polite">
+      <p v-if="state.error" class="error">⚠️ {{ state.error }}</p>
+      <p v-if="!state.loading && state.recipes.length === 0 && state.searched" class="empty">
+        No recipes found. Try a different term or relax the filters.
+      </p>
+
+      <div class="grid">
+        <article v-for="r in state.recipes" :key="r.uri" class="card">
+          <a class="image-link" :href="r.url" target="_blank" rel="noopener">
+            <img :src="r.image" :alt="r.label" loading="lazy" />
+          </a>
+          <div class="card-body">
+            <h3 class="card-title"><a :href="r.url" target="_blank" rel="noopener">{{ r.label }}</a></h3>
+            <div class="meta">
+              <span v-if="r.totalTime" class="badge">{{ r.totalTime }} min</span>
+              <span class="badge">{{ r.yield }} servings</span>
+              <span v-if="r.calories" class="badge">{{ r.calories }} kcal</span>
+            </div>
+            <div class="labels">
+              <span v-for="d in r.dietLabels.slice(0,3)" :key="d" class="chip">{{ d }}</span>
+              <span v-for="h in r.healthLabels.slice(0,3)" :key="h" class="chip soft">{{ h }}</span>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div class="footer-actions" v-if="state.nextUrl">
+        <button class="btn" @click="loadMore" :disabled="state.loading">
+          {{ state.loading ? 'Loading…' : 'Load more' }}
+        </button>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <small>Data from Edamam. “Appetisers” maps to Edamam’s <em>Starter</em> dish type.</small>
+    </footer>
+  </div>
+
+  <!-- Vue 3 via ESM -->
+  <script type="module">
+    import { createApp, reactive } from "https://unpkg.com/vue@3.4.38/dist/vue.esm-browser.prod.js";
+
+    const BASE = "/api/recipes"; // calls our server proxy (no keys in the browser)
+
+    const categories = [
+      { key: "all", label: "All" },
+      { key: "breakfast", label: "Breakfast", mealType: "Breakfast" },
+      { key: "lunch", label: "Lunch", mealType: "Lunch" },
+      { key: "dinner", label: "Dinner", mealType: "Dinner" },
+      { key: "snacks", label: "Snacks", mealType: "Snack" },
+      { key: "appetisers", label: "Appetisers", dishType: "Starter" }
+    ];
+
+    const dietOptions = ["Balanced", "High-Protein", "Low-Fat", "Low-Carb"];
+
+    const healthOptions = [
+      "Vegan","Vegetarian","Pescatarian","Gluten-Free","Dairy-Free",
+      "Keto-Friendly","Paleo","Sugar-Conscious","Alcohol-Free",
+      "Peanut-Free","Tree-Nut-Free","Soy-Free","Egg-Free","Shellfish-Free"
+    ];
+
+    const slug = (s) => s.toLowerCase().replace(/\s+/g, "-");
+
+    createApp({
+      setup() {
+        const state = reactive({
+          query: "",
+          category: categories[0],
+          diet: "",
+          health: [],
+          maxCalories: "",
+          recipes: [],
+          nextUrl: "",
+          loading: false,
+          error: "",
+          searched: false
+        });
+
+        function selectCategory(cat){ state.category = cat; runSearch(true); }
+
+        function buildUrl() {
+          const params = new URLSearchParams();
+          params.set("q", state.query || "");
+          if (state.category.mealType) params.set("mealType", state.category.mealType);
+          if (state.category.dishType) params.set("dishType", state.category.dishType);
+          if (state.diet) params.set("diet", slug(state.diet));
+          state.health.forEach(h => params.append("health", slug(h)));
+          if (state.maxCalories && Number(state.maxCalories) > 0) {
+            params.set("calories", `0-${Number(state.maxCalories)}`);
+          }
+          return `${BASE}?${params.toString()}`;
+        }
+
+        function normalizeRecipe(r) {
+          return {
+            uri: r.uri,
+            label: r.label,
+            image: r.images?.LARGE?.url || r.image,
+            url: r.url,
+            yield: r.yield ?? 1,
+            totalTime: r.totalTime ?? 0,
+            calories: r.calories ? Math.round(r.calories) : null,
+            dietLabels: r.dietLabels || [],
+            healthLabels: r.healthLabels || []
+          };
+        }
+
+        async function runSearch(reset=false) {
+          state.loading = true; state.error = "";
+          if (reset) { state.recipes = []; state.nextUrl = ""; }
+          try {
+            const res = await fetch(buildUrl());
+            if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+            const data = await res.json();
+            const hits = (data.hits ?? []).map(h => normalizeRecipe(h.recipe));
+            state.recipes = reset ? hits : state.recipes.concat(hits);
+            state.nextUrl = data?._links?.next?.href || "";
+            state.searched = true;
+          } catch (e) {
+            state.error = e.message || "Something went wrong fetching recipes.";
+          } finally {
+            state.loading = false;
+          }
+        }
+
+        async function loadMore() {
+          if (!state.nextUrl) return;
+          state.loading = true; state.error = "";
+          try {
+            const res = await fetch(state.nextUrl);
+            if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+            const data = await res.json();
+            const hits = (data.hits ?? []).map(h => normalizeRecipe(h.recipe));
+            state.recipes = state.recipes.concat(hits);
+            state.nextUrl = data?._links?.next?.href || "";
+          } catch (e) {
+            state.error = e.message || "Failed to load more recipes.";
+          } finally {
+            state.loading = false;
+          }
+        }
+
+        function clearFilters(){
+          state.query=""; state.category=categories[0]; state.diet="";
+          state.health=[]; state.maxCalories="";
+        }
+
+        // Initial search so the page isn't empty
+        runSearch(true);
+
+        return { state, categories, dietOptions, healthOptions, selectCategory, runSearch, loadMore, clearFilters, Math };
+      }
+    }).mount("#app");
+  </script>
+</body>
+</html>
