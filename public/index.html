@@ -1,12 +1,18 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Recipe Finder</title>
   <link rel="stylesheet" href="styles.css" />
-  <style>[v-cloak]{display:none}</style>
+  <style>
+    [v-cloak] {
+      display: none
+    }
+  </style>
 </head>
+
 <body>
   <div id="app" v-cloak>
     <header class="site-header">
@@ -16,29 +22,17 @@
 
     <section class="controls">
       <div class="search-row">
-        <input
-          v-model.trim="state.query"
-          class="search"
-          type="search"
-          placeholder="Search recipes (e.g., chicken, pasta, curry)…"
-          @keyup.enter="runSearch(true)"
-          aria-label="Search recipes"
-        />
+        <input v-model.trim="state.query" class="search" type="search"
+          placeholder="Search recipes (e.g., chicken, pasta, curry)…" @keyup.enter="runSearch(true)"
+          aria-label="Search recipes" />
         <button class="btn primary" @click="runSearch(true)" :disabled="state.loading">
           {{ state.loading ? 'Searching…' : 'Search' }}
         </button>
       </div>
 
       <div class="tabs" role="tablist" aria-label="Meal categories">
-        <button
-          v-for="c in categories"
-          :key="c.key"
-          class="tab"
-          :class="{ active: state.category.key === c.key }"
-          role="tab"
-          :aria-selected="state.category.key === c.key"
-          @click="selectCategory(c)"
-        >
+        <button v-for="c in categories" :key="c.key" class="tab" :class="{ active: state.category.key === c.key }"
+          role="tab" :aria-selected="state.category.key === c.key" @click="selectCategory(c)">
           {{ c.label }}
         </button>
       </div>
@@ -62,10 +56,8 @@
 
         <label class="filter">
           <span>Max calories (per recipe)</span>
-          <input
-            v-model.number="state.maxCalories"
-            type="number" min="0" step="50" placeholder="e.g., 700" class="input"
-          />
+          <input v-model.number="state.maxCalories" type="number" min="0" step="50" placeholder="e.g., 700"
+            class="input" />
           <small class="hint">Leave blank for no limit</small>
         </label>
 
@@ -118,8 +110,9 @@
   <script type="module">
     import { createApp, reactive } from "https://unpkg.com/vue@3.4.38/dist/vue.esm-browser.prod.js";
 
-    const BASE = "/api/recipes"; // calls our server proxy (no keys in the browser)
-
+    //const BASE = "/api/recipes"; // calls our server proxy (no keys in the browser)
+    const BASE = "https://recipe-finder-ouik.onrender.com/api/recipes";
+    
     const categories = [
       { key: "all", label: "All" },
       { key: "breakfast", label: "Breakfast", mealType: "Breakfast" },
@@ -132,9 +125,9 @@
     const dietOptions = ["Balanced", "High-Protein", "Low-Fat", "Low-Carb"];
 
     const healthOptions = [
-      "Vegan","Vegetarian","Pescatarian","Gluten-Free","Dairy-Free",
-      "Keto-Friendly","Paleo","Sugar-Conscious","Alcohol-Free",
-      "Peanut-Free","Tree-Nut-Free","Soy-Free","Egg-Free","Shellfish-Free"
+      "Vegan", "Vegetarian", "Pescatarian", "Gluten-Free", "Dairy-Free",
+      "Keto-Friendly", "Paleo", "Sugar-Conscious", "Alcohol-Free",
+      "Peanut-Free", "Tree-Nut-Free", "Soy-Free", "Egg-Free", "Shellfish-Free"
     ];
 
     const slug = (s) => s.toLowerCase().replace(/\s+/g, "-");
@@ -154,7 +147,7 @@
           searched: false
         });
 
-        function selectCategory(cat){ state.category = cat; runSearch(true); }
+        function selectCategory(cat) { state.category = cat; runSearch(true); }
 
         function buildUrl() {
           const params = new URLSearchParams();
@@ -183,7 +176,7 @@
           };
         }
 
-        async function runSearch(reset=false) {
+        async function runSearch(reset = false) {
           state.loading = true; state.error = "";
           if (reset) { state.recipes = []; state.nextUrl = ""; }
           try {
@@ -218,9 +211,9 @@
           }
         }
 
-        function clearFilters(){
-          state.query=""; state.category=categories[0]; state.diet="";
-          state.health=[]; state.maxCalories="";
+        function clearFilters() {
+          state.query = ""; state.category = categories[0]; state.diet = "";
+          state.health = []; state.maxCalories = "";
         }
 
         // Initial search so the page isn't empty
@@ -231,4 +224,5 @@
     }).mount("#app");
   </script>
 </body>
+
 </html>
